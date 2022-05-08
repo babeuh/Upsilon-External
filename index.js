@@ -272,6 +272,8 @@ angular.module('nwas', ['ngSanitize', 'pascalprecht.translate']).controller('mai
       let linkerScript = await loadLinkerScript();
       let address = 0;
       let tar = new tarball.TarWriter();
+      
+      let icon_support = document.getElementById("check-icons-support").checked;
 
       for(let i = 0; i < applications.length; i++) {
         let app = applications[i];
@@ -284,12 +286,14 @@ angular.module('nwas', ['ngSanitize', 'pascalprecht.translate']).controller('mai
         console.log("Taring", app.name)
         tar.addFileArrayBuffer(app.name, binary, {mode: "775"});
         
-        let resp = await $http.get("apps/" + app.name + "/app.icon", {responseType: "arraybuffer"});
-        
-        files.push({
-            name: app.name + ".icon",
-            binary: resp.data
-        });
+        if (icon_support) {
+          let resp = await $http.get("apps/" + app.name + "/app.icon", {responseType: "arraybuffer"});
+          
+          files.push({
+              name: app.name + ".icon",
+              binary: resp.data
+          });
+        }
         
       }
       if(wallpaper != null) {
@@ -492,6 +496,7 @@ angular.module('nwas', ['ngSanitize', 'pascalprecht.translate']).controller('mai
       DFU_WROTE: "Done",
       TOO_MUCH_FILES: "Not enough space on the device",
       OR: "or",
+      CHECK_ICONS: "Enable experimental icons support.",
       CROP_IMAGE_TITLE: "Crop wallpaper",
       CROP_IMAGE_SAVE: "Save",
       CANCEL: "Cancel",
@@ -524,6 +529,7 @@ angular.module('nwas', ['ngSanitize', 'pascalprecht.translate']).controller('mai
       DFU_WROTE: "Terminé",
       TOO_MUCH_FILES: "Pas assez de place sur l'appareil",
       OR: "ou",
+      CHECK_ICONS: "Activer le support des icons (Expérimental)",
       CROP_IMAGE_TITLE: "Recadrer le fond d'écran",
       CROP_IMAGE_SAVE: "Sauvegarder",
       CANCEL: "Annuler",
