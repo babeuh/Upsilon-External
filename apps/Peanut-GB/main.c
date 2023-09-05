@@ -8,6 +8,8 @@
 #include "peanut_gb.h"
 #include "lz4.h"
 
+#define PEANUT_FULL_GBC_SUPPORT 1
+
 #define MAX_SCRIPTSTORE_SIZE 8192
 
 #define SAVE_COOLDOWN 120
@@ -88,54 +90,79 @@ const uint16_t palette_gray_negative[4] = {0x0000, 0x52AA, 0xAD55, 0xFFFF};
 const uint16_t * palette = palette_peanut_GB;
 
 uint16_t color_from_gb_pixel(uint8_t gb_pixel) {
-    uint8_t gb_color = gb_pixel & 0x3;
-    return palette[gb_color];
+  uint8_t gb_color = gb_pixel & 0x3;
+  return palette[gb_color];
 }
 
-void lcd_draw_line_centered(struct gb_s *gb, const uint8_t pixels[LCD_WIDTH], const uint_fast8_t line) {
-  struct priv_t *priv = gb->direct.priv;
+void lcd_draw_line_centered(struct gb_s *gb, const uint8_t * input_pixels, const uint_fast8_t line) {
+  uint16_t output_pixels[2*LCD_WIDTH];
 
-  for(unsigned int x = 0; x < LCD_WIDTH; x++) {
-    priv->line_buffer[x] = color_from_gb_pixel(pixels[x]);
+  for(int i = 0; i < LCD_WIDTH; i++) {
+    if (gb->cgb.cgbMode) {
+      output_pixels[i] = gb->cgb.fixPalette[input_pixels[i]];
+      output_pixels[i] = (output_pixels[i] & 0x1F) << 11 | (output_pixels[i] & 0x3E0) << 1 | (output_pixels[i] & 0x7C00) >> 10;
+      output_pixels[i] = (output_pixels[i] & 0x1F) << 11 | (output_pixels[i] & 0x7E0) | (output_pixels[i] & 0xF800) >> 11;
+    } else {
+      output_pixels[i] = color_from_gb_pixel(input_pixels[i]);
+    }
   }
 
-  extapp_pushRect((NW_LCD_WIDTH - LCD_WIDTH) / 2, (NW_LCD_HEIGHT - LCD_HEIGHT) / 2 + line, LCD_WIDTH, 1, priv->line_buffer);
+  extapp_pushRect((NW_LCD_WIDTH - LCD_WIDTH) / 2, (NW_LCD_HEIGHT - LCD_HEIGHT) / 2 + line, LCD_WIDTH, 1, output_pixels);
 }
 
 static void lcd_draw_line_maximized(struct gb_s * gb, const uint8_t * input_pixels, const uint_fast8_t line) {
   // Nearest neighbor scaling of a 160x144 texture to a 320x240 resolution
   // Horizontally, we just double
-  uint16_t output_pixels[2*LCD_WIDTH];
-  for (int i=0; i<LCD_WIDTH; i++) {
-    uint16_t color = color_from_gb_pixel(input_pixels[i]);
-    output_pixels[2*i] = color;
-    output_pixels[2*i+1] = color;
+  uint16_t output_pixels[LCD_WIDTH];
+  uint16_t zoomPixels[2 * LCD_WIDTH];
+  for (int i = 0; i < LCD_WIDTH; i++) {
+    if (gb->cgb.cgbMode) {
+      output_pixels[i] = gb->cgb.fixPalette[input_pixels[i]];
+      output_pixels[i] = (output_pixels[i] & 0x1F) << 11 | (output_pixels[i] & 0x3E0) << 1 | (output_pixels[i] & 0x7C00) >> 10;
+      output_pixels[i] = (output_pixels[i] & 0x1F) << 11 | (output_pixels[i] & 0x7E0) | (output_pixels[i] & 0xF800) >> 11;
+    } else {
+      output_pixels[i] = color_from_gb_pixel(input_pixels[i]);
+    }
+
+    uint16_t color = output_pixels[i];
+
+    zoomPixels[2 * i] = color;
+    zoomPixels[2 * i + 1] = color;
   }
   // Vertically, we want to scale by a 5/3 ratio. So we need to make 5 lines out of three:  we double two lines out of three.
-  uint16_t y = (5*line)/3;
-  extapp_pushRect(0, y, 2*LCD_WIDTH, 1, output_pixels);
-  if (line%3 != 0) {
-    extapp_pushRect(0, y+1, 2*LCD_WIDTH, 1, output_pixels);
+  uint16_t y = (5 * line) / 3;
+  extapp_pushRect(0, y, 2 * LCD_WIDTH, 1, zoomPixels);
+  if (line % 3 != 0) {
+    extapp_pushRect(0, y + 1, 2 * LCD_WIDTH, 1, zoomPixels);
   }
 }
 
 static void lcd_draw_line_maximized_ratio(struct gb_s * gb, const uint8_t * input_pixels, const uint_fast8_t line) {
   // Nearest neighbor scaling of a 160x144 texture to a 266x240 resolution (to keep the ratio)
   // Horizontally, we multiply by 1.66 (160*1.66 = 266)
-  uint16_t output_pixels[266];
-  for (int i=0; i<LCD_WIDTH; i++) {
-    uint16_t color = color_from_gb_pixel(input_pixels[i]);
-    // We can't use floats, so we use a fixed point representation
-    output_pixels[166*i/100] = color;
-    output_pixels[166*i/100+1] = color;
-    output_pixels[166*i/100+2] = color;
-  }
+  uint16_t output_pixels[LCD_WIDTH];
+  uint16_t zoomPixels[266];
+  for (int i = 0; i < LCD_WIDTH; i++) {
+    if (gb->cgb.cgbMode) {
+      output_pixels[i] = gb->cgb.fixPalette[input_pixels[i]];
+      output_pixels[i] = (output_pixels[i] & 0x1F) << 11 | (output_pixels[i] & 0x3E0) << 1 | (output_pixels[i] & 0x7C00) >> 10;
+      output_pixels[i] = (output_pixels[i] & 0x1F) << 11 | (output_pixels[i] & 0x7E0) | (output_pixels[i] & 0xF800) >> 11;
+    } else {
+      output_pixels[i] = color_from_gb_pixel(input_pixels[i]);
+    }
 
+    uint16_t color = output_pixels[i];
+
+    zoomPixels[166 * i / 100] = color;
+    zoomPixels[166 * i / 100 + 1] = color;
+    zoomPixels[166 * i / 100 + 2] = color;
+  }
+  // We can't use floats, so we use a fixed point representation
   // Vertically, we want to scale by a 5/3 ratio. So we need to make 5 lines out of three:  we double two lines out of three.
-  uint16_t y = (5*line)/3;
-  extapp_pushRect((NW_LCD_WIDTH - 266) / 2, y, 266, 1, output_pixels);
-  if (line%3 != 0) {
-    extapp_pushRect((NW_LCD_WIDTH - 266) / 2, y+1, 266, 1, output_pixels);
+  uint16_t y = (5 * line) / 3;
+  extapp_pushRect((NW_LCD_WIDTH - 266) / 2, y, 266, 1, zoomPixels);
+  if (line % 3 != 0) {
+    extapp_pushRect((NW_LCD_WIDTH - 266) / 2, y + 1, 266, 1, zoomPixels);
   }
 }
 
@@ -230,7 +257,7 @@ void extapp_main() {
   // Alloc internal RAM.
   gb.wram = malloc(WRAM_SIZE);
   gb.vram = malloc(VRAM_SIZE);
-  gb.hram = malloc(HRAM_SIZE);
+  gb.hram_io = malloc(HRAM_IO_SIZE);
   gb.oam = malloc(OAM_SIZE);
 
   gb_ret = gb_init(&gb, &gb_rom_read, &gb_cart_ram_read, &gb_cart_ram_write, &gb_error, &priv);
@@ -360,9 +387,10 @@ void extapp_main() {
 
   }
   
+  
   free(gb.wram);
   free(gb.vram);
-  free(gb.hram);
+  free(gb.hram_io);
   free(gb.oam);
   
   write_save_file(file_name, priv.cart_ram, save_size);
