@@ -25,10 +25,31 @@ angular.module('nwas', ['ngSanitize', 'pascalprecht.translate']).controller('mai
   $scope.selectedApps = [];
   $scope.customFiles = [];
   $scope.webUSB = typeof navigator.usb !== 'undefined';
+  $scope.installText = "ERASE"
 
   $scope.reload = function reload() {
     document.location.reload();
   }
+
+  function reloadInstallText() {
+    if($scope.selectedApps.length > 0 || $scope.customFiles.length > 0 || $scope.wallpaper != null) {
+      $scope.installText = "ERASE_AND_INSTALL";
+    } else {
+      $scope.installText = "ERASE";
+    }
+  }
+
+  $scope.$watch('selectedApps', function() {
+    reloadInstallText();
+  }, true);
+
+  $scope.$watch('customFiles', function() {
+    reloadInstallText();
+  }, true);
+
+  $scope.$watch('wallpaper', function() {
+    reloadInstallText();
+  }, true);
 
   $scope.addApplication = function addApplication(app) {
     if($scope.selectedApps.indexOf(app) < 0) {
@@ -485,7 +506,8 @@ angular.module('nwas', ['ngSanitize', 'pascalprecht.translate']).controller('mai
       SELECTED_APPLICATIONS: 'Selected applications',
       REMOVE: 'Remove',
       CUSTOM_FILE: 'Custom file',
-      INSTALL: 'Install',
+      ERASE: 'Erase',
+      ERASE_AND_INSTALL: 'Erase and install',
       WALLPAPER: "Wallpaper",
       WALLPAPER_FILE: 'Image file',
       AVAILABLE_APPLICATIONS: 'Available applications',
@@ -519,7 +541,8 @@ angular.module('nwas', ['ngSanitize', 'pascalprecht.translate']).controller('mai
       SELECTED_APPLICATIONS: 'Applications sélectionnées',
       REMOVE: 'Supprimer',
       CUSTOM_FILE: 'Fichier local',
-      INSTALL: 'Installer',
+      ERASE: 'Effacer',
+      ERASE_AND_INSTALL: 'Effacer et installer',
       WALLPAPER: 'Fond d\'écran',
       WALLPAPER_FILE: 'Fichier image',
       AVAILABLE_APPLICATIONS: 'Applications disponibles',
